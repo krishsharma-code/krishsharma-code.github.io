@@ -1,0 +1,221 @@
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f8f9fb;
+  --text: #16181d;
+  --muted: #5b6472;
+  --line: #e6e8ee;
+  --accent: #4338ca;
+  --code-bg: #f5f6f8;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --bg-soft: #15181e;
+    --text: #e8eaee;
+    --muted: #9aa3b2;
+    --line: #262b34;
+    --accent: #a5b4fc;
+    --code-bg: #161a21;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 22px;
+}
+
+header.site {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 48px;
+}
+
+header.site .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 22px;
+  padding-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.brand span { color: var(--accent); }
+
+nav.top { display: flex; gap: 18px; flex-wrap: wrap; }
+
+nav.top a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14.5px;
+}
+
+nav.top a:hover { color: var(--accent); }
+
+h1, h2, h3 { line-height: 1.28; letter-spacing: -0.02em; }
+
+h1 { font-size: 2.05rem; margin: 0 0 14px; }
+
+h2 { font-size: 1.42rem; margin: 2.2em 0 0.55em; }
+
+h3 { font-size: 1.14rem; margin: 1.8em 0 0.45em; }
+
+p { margin: 0 0 1.05em; }
+
+a { color: var(--accent); }
+
+.lede { color: var(--muted); font-size: 1.02rem; }
+
+.meta {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 40px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.meta time { font-variant-numeric: tabular-nums; }
+
+ul, ol { margin: 0 0 1.05em; padding-left: 1.3em; }
+
+li { margin-bottom: 0.45em; }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.87em;
+  background: var(--code-bg);
+  padding: 0.15em 0.38em;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  overflow-x: auto;
+  margin: 0 0 1.3em;
+  line-height: 1.55;
+}
+
+pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 0.84em;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.4em;
+  font-size: 0.9rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  background: var(--bg-soft);
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.table-scroll { overflow-x: auto; }
+
+blockquote {
+  margin: 0 0 1.3em;
+  padding-left: 16px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 40px 0 26px;
+}
+
+.bio {
+  font-size: 0.93rem;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.65;
+}
+
+.post-list { list-style: none; padding: 0; margin: 0; }
+
+.post-list li {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+  margin: 0;
+}
+
+.post-list a.title {
+  font-size: 1.16rem;
+  font-weight: 650;
+  text-decoration: none;
+  color: var(--text);
+  display: block;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.post-list a.title:hover { color: var(--accent); }
+
+.post-list p { margin: 0 0 8px; color: var(--muted); font-size: 0.95rem; }
+
+.post-list .date {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+footer.site {
+  border-top: 1px solid var(--line);
+  margin-top: 64px;
+  padding: 26px 0 48px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+footer.site a { color: var(--muted); text-decoration: none; }
+footer.site a:hover { color: var(--accent); }
+
+footer.site .wrap { display: flex; gap: 18px; flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  body { font-size: 16.5px; }
+  h1 { font-size: 1.72rem; }
+  header.site .wrap { padding-top: 18px; padding-bottom: 18px; }
+}

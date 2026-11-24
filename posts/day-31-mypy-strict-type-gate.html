@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 31: I Put a Strict Type Gate on My Python Portfolio — It Found 6 Real Bugs</title>
+<meta name="description" content="Day 31 of my Datheon Python internship: a mypy --strict gate over 33 targets found 39 errors and six real bugs before any test could.">
+<link rel="canonical" href="https://krishsharma-code.github.io/posts/day-31-mypy-strict-type-gate.html">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="Day 31: I Put a Strict Type Gate on My Python Portfolio — It Found 6 Real Bugs">
+<meta property="og:description" content="A mypy --strict gate over 33 targets found 39 errors in 15 files. Six were real defects that 1,800 passing tests never saw.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://krishsharma-code.github.io/posts/day-31-mypy-strict-type-gate.html">
+<meta property="article:published_time" content="2026-11-24">
+<meta name="author" content="Krish Sharma">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Day 31: I Put a Strict Type Gate on My Python Portfolio — It Found 6 Real Bugs",
+  "description": "Day 31 of my Datheon Python internship: a mypy --strict gate over 33 targets found 39 errors and six real bugs before any test could.",
+  "datePublished": "2026-11-24",
+  "author": {
+    "@type": "Person",
+    "name": "Krish Sharma",
+    "url": "https://about.me/krishsharma-code",
+    "sameAs": [
+      "https://github.com/krishsharma-code",
+      "https://www.linkedin.com/in/krish-sharma07"
+    ]
+  },
+  "mainEntityOfPage": "https://krishsharma-code.github.io/posts/day-31-mypy-strict-type-gate.html"
+}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Krish Sharma<span>.</span></a>
+    <nav class="top">
+      <a href="https://github.com/krishsharma-code">GitHub</a>
+      <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+      <a href="https://about.me/krishsharma-code">About.me</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article>
+    <h1>Day 31: I Put a Strict Type Gate on My Python Portfolio — It Found 6 Real Bugs</h1>
+    <p class="meta"><time datetime="2026-11-24">24 November 2026</time> · Krish Sharma</p>
+
+    <p>Every gate in my Datheon Python Internship repo asks a question about execution. The test suite asks "does it run?". The coverage gate asks "is this line executed?". The mutation gate asks "do the tests have teeth?". The fuzzer asks "can I crash it?".</p>
+
+    <p>None of them asks the cheapest question of all: <strong>can a call be wrong without a test ever running?</strong></p>
+
+    <p>That is the question a type checker answers on every commit, so on Day 31 I added one — <code>mypy --strict</code>, wired into CI, over every file that ships.</p>
+
+    <h2>The problem: my annotations were a promise nobody checked</h2>
+
+    <p>I am Krish Sharma (<a href="https://github.com/krishsharma-code">krishsharma-code</a>), and this repo — <a href="https://github.com/krishsharma-code/Datheon_Python_Internship">Datheon_Python_Internship</a> — is five Python projects sharing one core: a hangman game, a portfolio tracker, a file-organizer automation tool, a regex-driven terminal assistant, and an OOP inventory system. Every public callable has type hints. Every module has Google-style docstrings.</p>
+
+    <p>But "has annotations" and "annotations are correct" are different claims. My hints were documentation that nothing verified. A function could be annotated <code>-&gt; str</code> and return <code>None</code> on one branch, and 1,800 passing tests would never notice if that branch was not exercised.</p>
+
+    <h2>What the gate does</h2>
+
+    <p><code>tools/typecheck.py</code> runs mypy in <strong>six phases</strong> over <strong>33 targets</strong> — every file that ships, nothing excused:</p>
+
+    <ul>
+      <li><code>core</code> — the thirteen shared modules plus the <code>datheon</code> package</li>
+      <li><code>01_hangman_game</code> … <code>05_inventory_oop</code> — one phase per task pack</li>
+    </ul>
+
+    <pre><code>python tools/typecheck.py                # the whole gate
+python tools/typecheck.py --json         # machine-readable verdict
+python tools/typecheck.py --core-only    # skip the five project phases
+python tools/typecheck.py --keep-shadow  # keep the shadow trees for triage</code></pre>
+
+    <p>Exit codes follow the rest of the repo: <strong>0</strong> every phase clean and the config honest, <strong>1</strong> at least one error or finding, <strong>2</strong> the gate could not measure. A gate that cannot measure never reports success.</p>
+
+    <h3>The shadow tree trick</h3>
+
+    <p><code>projects/01_hangman_game</code> starts with a digit, so it is not a valid Python package name — mypy refuses to look inside it at all. The tempting fix is to exclude the five projects, which would leave the largest part of the codebase untyped.</p>
+
+    <p>The gate does the opposite. For each project it builds a <strong>shadow tree</strong> — the shared core modules copied flat next to that project's files — which reproduces the module graph the CLIs actually create at runtime:</p>
+
+    <pre><code>def build_shadow_tree(project: Path, destination: Path, root: Path = ROOT) -&gt; Path:
+    """Lay out one project's module graph flat in destination."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for suffix in SHADOW_CORE_SUFFIXES:
+        for core in sorted(root.glob(f"*{suffix}")):
+            if core.is_file():
+                shutil.copyfile(core, destination / core.name)
+    for module in python_files(project):
+        shutil.copyfile(module, destination / module.name)
+    return destination</code></pre>
+
+    <p>Copying is what lets mypy see the same import edges the interpreter sees, and it is also why the shadow tree needs <code>--explicit-package-bases</code> — without it mypy names files after the shadow directory and reports every one as "found twice under different module names".</p>
+
+    <h3>The config is audited, not trusted</h3>
+
+    <p>A gate is only as good as its scope, so the script compares <code>[tool.mypy] files</code> in <code>pyproject.toml</code> against <code>[tool.setuptools] py-modules</code> — what actually ships. Seven codes cover it: missing <code>files</code>, missing <code>strict</code>, a <code>python_version</code> that disagrees with <code>requires-python</code>, a shipped module with no <code>files</code> entry, a deleted <code>py.typed</code>, no CI step, and <code>mypy</code> missing from <code>requirements.txt</code>.</p>
+
+    <p>The scope check is the one that keeps it honest over time: add a fourteenth core module and the gate fails until it appears in both tables.</p>
+
+    <h2>What it found on the first run</h2>
+
+    <p><strong>39 errors in 15 files.</strong> Six of them were not annotation gaps — they were defects:</p>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Defect</th><th>Where</th><th>What it would have done</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>asyncio.run(factory())</code> on an <code>Awaitable</code></td><td><code>async_organizer.run_coroutine_sync</code></td><td><code>asyncio.run</code> accepts a coroutine only; a <code>Future</code> or task raised <code>ValueError</code> before the work started</td></tr>
+        <tr><td>A JSON <em>string</em> iterated as a list</td><td><code>chatbot.IntentEngine.from_json</code></td><td><code>"fallbacks": "sorry"</code> became one response per character</td></tr>
+        <tr><td><code>len()</code> on an <code>Optional</code></td><td><code>inventory.main</code> demo</td><td><code>manager.get("B002")</code> can return <code>None</code>; the demo formatted it as if it could not</td></tr>
+        <tr><td>A callback contract no caller met</td><td><code>persistence.atomic_write_with</code></td><td>The type was wrong, not the callers</td></tr>
+        <tr><td>An import that was never a re-export</td><td><code>inventory.main</code> → <code>inventory.InventoryError</code></td><td>Worked by accident; <code>--no-implicit-reexport</code> turns "this module owns that name" into a declaration</td></tr>
+        <tr><td>A <code>type: ignore</code> hiding the wrong code</td><td><code>chatbot.Intent._parse</code></td><td>Suppressed nothing — the real code was <code>call-overload</code>, so the error stayed live</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>The rest were honest gaps: a bare <code>dict</code>, a bare <code>frozenset</code>, a <code>set</code> with no element type.</p>
+
+    <p>None of these would have been caught by another test. That is the whole argument for the gate.</p>
+
+    <h2>Wired into CI</h2>
+
+    <p>One new job in <code>.github/workflows/ci.yml</code>:</p>
+
+    <pre><code>type-check:
+  name: Type check (mypy --strict)
+  runs-on: ubuntu-latest</code></pre>
+
+    <p>One runner, one interpreter. A type error is not a platform signal, so twelve copies of the job would cost minutes and prove nothing extra. The job is listed in the <code>CI status</code> aggregate — the single status a branch-protection rule can require.</p>
+
+    <p>Alongside it: <code>docs/type_checking.md</code>, 76 test functions for the gate itself, and <code>datheon/py.typed</code> so consumers' checkers actually read the annotations this gate just proved.</p>
+
+    <h2>What it deliberately does not cover</h2>
+
+    <ul>
+      <li><strong><code>tests/</code></strong> — 48 files of fixture-heavy functions; pytest's fixtures are dynamic by design, and strict mypy there produces annotations that document nothing.</li>
+      <li><strong><code>tools/</code></strong> — the gates themselves; each has its own test module.</li>
+      <li><strong>Runtime behaviour</strong> — a clean run says the calls agree with the signatures, not that the code is correct.</li>
+    </ul>
+
+    <p>Each gate answers one question: <code>pytest</code> for "does it run", <code>mutation.py</code> for "do the tests have teeth", <code>coverage_gate.py</code> for "is it executed", <code>typecheck.py</code> for "do the calls agree with the signatures", <code>benchmark_budget.py</code> for "is it still fast".</p>
+
+    <h2>Roadmap</h2>
+
+    <ul>
+      <li>Turn the six defects into regression tests so they cannot come back silently.</li>
+      <li>Run <code>pyright</code> alongside mypy — two independent checkers disagree in useful places.</li>
+      <li>Tighten the shadow-tree scope so the five projects are checked as packages instead of flat directories.</li>
+    </ul>
+
+    <h2>Conclusion</h2>
+
+    <p>Day 31 was not a feature day. It was the day the repo started asking a question it had never asked before, and the answer on the first run was "yes, the calls were wrong in fifteen files".</p>
+
+    <p>If you are building anything in Python that other people install, add this gate. It costs one CI job and it pays for itself the first time it catches an <code>Optional</code> you forgot.</p>
+
+    <p>The repo is open: <a href="https://github.com/krishsharma-code/Datheon_Python_Internship">github.com/krishsharma-code/Datheon_Python_Internship</a> — star it, read <code>docs/type_checking.md</code>, or open an issue if you spot something the gate missed.</p>
+
+    <hr>
+
+    <p class="bio">Written by Krish Sharma (krishsharma-code) — Open-Source Contributor. Explore my code on <a href="https://github.com/krishsharma-code">GitHub</a>, connect with me on <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>, and view my full portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="/">← All posts</a>
+    <a href="https://github.com/krishsharma-code">GitHub</a>
+    <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+    <a href="https://about.me/krishsharma-code">About.me</a>
+    <span class="license">&copy; 2026 Krish Sharma &middot; Code <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE">MIT</a> &middot; Articles <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE-CONTENT">CC BY 4.0</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
