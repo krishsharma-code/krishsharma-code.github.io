@@ -11,6 +11,11 @@
 <meta property="og:description" content="India's fiscal year runs April to March, so date.year fails on every Jan-Mar date. A dependency-free Python module for FY labels, quarters and bounds.">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://krishsharma-code.github.io/posts/indian-fiscal-year-python-april-march.html">
+<meta property="og:image" content="https://krishsharma-code.github.io/assets/img/fiscal-year-demo.png">
+<meta property="og:image:width" content="1212">
+<meta property="og:image:height" content="1231">
+<meta property="og:image:alt" content="Terminal output of python example.py bucketing eight invoices into Indian fiscal years">
+<meta name="twitter:card" content="summary_large_image">
 <meta property="article:published_time" content="2026-11-25">
 <meta name="author" content="Krish Sharma">
 <script type="application/ld+json">
@@ -28,6 +33,12 @@
       "https://github.com/krishsharma-code",
       "https://www.linkedin.com/in/krish-sharma07"
     ]
+  },
+  "image": {
+    "@type": "ImageObject",
+    "url": "https://krishsharma-code.github.io/assets/img/fiscal-year-demo.png",
+    "width": 1212,
+    "height": 1231
   },
   "mainEntityOfPage": "https://krishsharma-code.github.io/posts/indian-fiscal-year-python-april-march.html"
 }
@@ -50,6 +61,12 @@
   <article>
     <h1>Your <code>date.year</code> Is Wrong for a Quarter of India's Calendar</h1>
     <p class="meta"><time datetime="2026-11-25">25 November 2026</time> · Krish Sharma</p>
+
+    <figure>
+      <img src="/assets/img/fiscal-year-demo.png" width="1212" height="1231" loading="eager"
+           alt="Terminal output of python example.py from the fiscal-year module: eight invoice dates mapped to FY2025-26 or FY2026-27 with fiscal month and quarter labels, totals of Rs 75,050 and Rs 51,000 per fiscal year, and a rejected 2025-2027 label.">
+      <figcaption>Real output of <code>python example.py</code> from <code>python/fiscal-year</code>. The 31 March 2026 invoice stays in FY2025-26; the 1 April 2026 one starts FY2026-27.</figcaption>
+    </figure>
 
     <p>Take an invoice dated 20 February 2026. Now ask Python what year it belongs to. <code>date(2026, 2, 20).year</code> answers <code>2026</code>, and for an Indian business that answer is wrong — the invoice sits inside FY 2025-26, the same fiscal year as a receipt from 15 May 2025.</p>
 
@@ -118,7 +135,15 @@ def quarter_bounds(year, quarter):
 
     <p>Two documented limits are deliberate. Two-digit labels are read as 20xx, so <code>'FY99'</code> means 2099 — a compact label carries no century, and pretending otherwise would be a guess. Years are bounded to 1000-9998 so that every label and the 31 March closing the year stay representable.</p>
 
-    <p>The module comes with a runnable <code>example.py</code> that buckets a ledger of eight invoices across the 1 April boundary and parses a list of messy imported labels, and a test suite of <strong>121 tests</strong> that all pass, plus doctested examples in the docstrings. That is the repo's rule: a subfolder ships with its own code, its own tests and its own README, or it does not get committed.</p>
+    <p>The module comes with a runnable <code>example.py</code> that buckets a ledger of eight invoices across the 1 April boundary and parses a list of messy imported labels, and a test suite of <strong>121 tests</strong> that all pass, plus doctested examples in the docstrings.</p>
+
+    <figure>
+      <img src="/assets/img/fiscal-year-tests.png" width="1007" height="239" loading="lazy"
+           alt="Terminal showing python -m pytest -q in the fiscal-year folder, ending with 121 passed.">
+      <figcaption>The suite as it runs in the repo: <code>121 passed</code> in under a second, no third-party dependencies.</figcaption>
+    </figure>
+
+    <p> That is the repo's rule: a subfolder ships with its own code, its own tests and its own README, or it does not get committed.</p>
 
     <h2>Roadmap</h2>
 
