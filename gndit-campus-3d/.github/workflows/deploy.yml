@@ -1,0 +1,66 @@
+name: Build campus data & deploy to Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 1 * *"   # OSM refresh, 1st of every month
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pipeline dependencies
+        run: pip install -r pipeline/requirements.txt
+
+      - name: Fetch OSM data and build data/campus.json
+        # Agar Overpass down hai to commit kiya hua snapshot hi deploy hoga.
+        continue-on-error: true
+        run: python pipeline/build_campus.py
+
+      - name: Report dataset
+        run: |
+          python - <<'PY'
+          import json
+          d = json.load(open("data/campus.json"))
+          print("counts:", d["meta"]["counts"])
+          print("generated:", d["meta"]["generated"], "| partial:", d["meta"].get("partial", False))
+          PY
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r index.html assets data _site/
+          touch _site/.nojekyll
+          du -sh _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

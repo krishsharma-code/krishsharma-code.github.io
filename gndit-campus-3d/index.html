@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Guru Nanak Dev DSEU Campus — 3D map</title>
+<meta name="description" content="Interactive 3D map of the Guru Nanak Dev DSEU Campus, Sector 15 Rohini, Delhi. Built with OpenStreetMap data and Three.js." />
+<link rel="stylesheet" href="assets/style.css?v=1" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.module.js",
+    "three/addons/": "./assets/vendor/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="brand-mark">GN</span>
+    <span class="brand-text">
+      <strong>Guru Nanak Dev DSEU</strong>
+      <em>Sector 15, Rohini · 3D campus</em>
+    </span>
+  </div>
+
+  <div class="search">
+    <input id="search" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search a building, road, canteen…" aria-label="Search campus" />
+    <ul id="suggest" role="listbox" hidden></ul>
+  </div>
+
+  <nav class="actions">
+    <button id="btn-daynight" class="btn" title="Switch between day and night">Night</button>
+    <button id="btn-trace" class="btn" title="Draw a missing building footprint">Add building</button>
+    <button id="btn-export" class="btn" title="Download the buildings you added" hidden>Export</button>
+    <button id="btn-reset" class="btn ghost" title="Back to the default view">Reset</button>
+  </nav>
+</header>
+
+<aside id="panel" class="card" hidden>
+  <button class="close" id="panel-close" aria-label="Close">×</button>
+  <h2 id="panel-title">Building</h2>
+  <p id="panel-sub" class="muted"></p>
+  <dl id="panel-facts"></dl>
+  <button id="panel-focus" class="btn small">Fly to it</button>
+</aside>
+
+<section id="trace-card" class="card" hidden>
+  <h2>Add a building footprint</h2>
+  <ol class="steps">
+    <li>Map par building ke corners par click karein (min 3 points).</li>
+    <li><kbd>Enter</kbd> dabaayein ya <b>Finish</b> — polygon band ho jayega.</li>
+    <li>Naam aur floors bharein, phir <b>Save</b>.</li>
+  </ol>
+  <p class="muted small">Points: <span id="trace-count">0</span></p>
+  <div class="row">
+    <button id="trace-undo" class="btn small ghost">Undo point</button>
+    <button id="trace-finish" class="btn small">Finish</button>
+    <button id="trace-cancel" class="btn small ghost">Cancel</button>
+  </div>
+  <form id="trace-form" hidden>
+    <label>Name <input id="trace-name" placeholder="e.g. Mechanical Workshop" required /></label>
+    <label>Kind
+      <select id="trace-kind">
+        <option value="academic">Academic / classroom</option>
+        <option value="workshop">Workshop / lab</option>
+        <option value="hostel">Hostel</option>
+        <option value="office">Office / admin</option>
+        <option value="food">Canteen / food</option>
+        <option value="health">Health / medical</option>
+        <option value="sports">Sports</option>
+        <option value="building">Other</option>
+      </select>
+    </label>
+    <label>Floors <input id="trace-levels" type="number" min="1" max="30" value="2" /></label>
+    <div class="row">
+      <button type="submit" class="btn small">Save building</button>
+      <button type="button" id="trace-discard" class="btn small ghost">Discard</button>
+    </div>
+  </form>
+</section>
+
+<div id="clock" class="card">
+  <label for="hour">Time of day <output id="hour-out">15:00</output></label>
+  <input id="hour" type="range" min="0" max="24" step="0.25" value="15" />
+  <div class="legend">
+    <span><i style="background:#c8b9a6"></i>Academic</span>
+    <span><i style="background:#b9c4cf"></i>Hostel</span>
+    <span><i style="background:#c2c2b4"></i>Workshop</span>
+    <span><i style="background:#8aa06a"></i>Green</span>
+  </div>
+</div>
+
+<div id="hint" class="card small">Drag to orbit · scroll to zoom · right-drag to pan · click a building</div>
+
+<footer id="credit">
+  <span id="data-note"></span>
+  Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (ODbL) ·
+  <a href="https://threejs.org" target="_blank" rel="noopener">Three.js</a> ·
+  <span id="build-stamp">v1.0</span>
+</footer>
+
+<div id="loader">
+  <div class="loader-box">
+    <div class="spinner"></div>
+    <p id="loader-text">Campus load ho raha hai…</p>
+  </div>
+</div>
+
+<script type="module" src="assets/app.js?v=1"></script>
+</body>
+</html>

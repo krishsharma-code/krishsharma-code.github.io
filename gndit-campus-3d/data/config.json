@@ -1,0 +1,21 @@
+{
+  "name": "Guru Nanak Dev DSEU Campus",
+  "shortName": "GNDIT Rohini",
+  "city": "Sector 15, Rohini, Delhi 110089",
+  "center": [
+    77.12394,
+    28.7288
+  ],
+  "bbox": [
+    28.7208,
+    77.1144,
+    28.7368,
+    77.1334
+  ],
+  "defaultView": {
+    "yaw": 35,
+    "pitch": 42,
+    "distance": 620
+  },
+  "notes": "bbox = [south, west, north, east] in degrees. center = [lon, lat] and is the local origin (0,0) of the 3D scene."
+}
