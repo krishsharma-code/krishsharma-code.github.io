@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your date.year Is Wrong for a Quarter of India's Calendar</title>
+<meta name="description" content="India's fiscal year runs April to March, so date.year fails on every Jan-Mar date. A dependency-free Python module for FY labels, quarters and bounds.">
+<link rel="canonical" href="https://krishsharma-code.github.io/posts/indian-fiscal-year-python-april-march.html">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="Your date.year Is Wrong for a Quarter of India's Calendar">
+<meta property="og:description" content="India's fiscal year runs April to March, so date.year fails on every Jan-Mar date. A dependency-free Python module for FY labels, quarters and bounds.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://krishsharma-code.github.io/posts/indian-fiscal-year-python-april-march.html">
+<meta property="article:published_time" content="2026-11-25">
+<meta name="author" content="Krish Sharma">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Your date.year Is Wrong for a Quarter of India's Calendar",
+  "description": "India's fiscal year runs April to March, so date.year fails on every Jan-Mar date. A dependency-free Python module for FY labels, quarters and bounds.",
+  "datePublished": "2026-11-25",
+  "author": {
+    "@type": "Person",
+    "name": "Krish Sharma",
+    "url": "https://about.me/krishsharma-code",
+    "sameAs": [
+      "https://github.com/krishsharma-code",
+      "https://www.linkedin.com/in/krish-sharma07"
+    ]
+  },
+  "mainEntityOfPage": "https://krishsharma-code.github.io/posts/indian-fiscal-year-python-april-march.html"
+}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Krish Sharma<span>.</span></a>
+    <nav class="top">
+      <a href="https://github.com/krishsharma-code">GitHub</a>
+      <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+      <a href="https://about.me/krishsharma-code">About.me</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article>
+    <h1>Your <code>date.year</code> Is Wrong for a Quarter of India's Calendar</h1>
+    <p class="meta"><time datetime="2026-11-25">25 November 2026</time> · Krish Sharma</p>
+
+    <p>Take an invoice dated 20 February 2026. Now ask Python what year it belongs to. <code>date(2026, 2, 20).year</code> answers <code>2026</code>, and for an Indian business that answer is wrong — the invoice sits inside FY 2025-26, the same fiscal year as a receipt from 15 May 2025.</p>
+
+    <p>That is a one-line bug that survives review, because the code looks correct. Nothing crashes. The totals are just quietly filed under the wrong year, and the error only surfaces when someone reconciles a GST return in July.</p>
+
+    <h2>The problem: one quarter of the calendar does not exist</h2>
+
+    <p>India's financial year runs from 1 April to 31 March. Every annual report, every GST filing period, every TDS quarter, every payroll statement is keyed to that boundary. Standard library <code>datetime</code> knows nothing about it, so each project reinvents the same three lines of month arithmetic — usually slightly differently, and usually wrong at the edges.</p>
+
+    <p>I am Krish Sharma (<a href="https://github.com/krishsharma-code">krishsharma-code</a>), and my <a href="https://github.com/krishsharma-code/daily-dev-workspace">daily-dev-workspace</a> repo is where I keep one self-contained piece of work per feature. This week's addition is <code>python/fiscal-year</code>: a dependency-free module that answers the five questions that come up whenever dates meet Indian reporting. Standard library only — <code>datetime</code> and <code>re</code>, nothing else.</p>
+
+    <h2>How it works</h2>
+
+    <p>The core idea is that a fiscal year is identified by the calendar year it <strong>starts</strong> in. FY 2025-26 opens on 1 April 2025 and closes on 31 March 2026, so both of those dates return <code>2025</code>. That single decision makes every label and every range consistent.</p>
+
+    <p>Here is the real implementation from <code>fiscal_year.py</code>, the two functions everything else builds on:</p>
+
+    <pre><code>def fy_of(value):
+    """Return the start year of the fiscal year containing ``value``.
+
+    &gt;&gt;&gt; fy_of(date(2025, 4, 1))
+    2025
+    &gt;&gt;&gt; fy_of(date(2026, 3, 31))
+    2025
+    """
+    day = _as_date(value)
+    return day.year if day.month &gt;= _FY_START_MONTH else day.year - 1
+
+
+def quarter_bounds(year, quarter):
+    """Return ``(first_day, last_day)`` of a fiscal quarter, inclusive.
+
+    &gt;&gt;&gt; quarter_bounds(2025, 4)
+    (datetime.date(2026, 1, 1), datetime.date(2026, 3, 31))
+    """
+    year = _check_year(year)
+    quarter = _check_quarter(quarter)
+    open_month = _QUARTER_OPEN_MONTH[quarter]
+    open_year = year if open_month &gt;= _FY_START_MONTH else year + 1
+    start = _dt.date(open_year, open_month, 1)
+    # The last day of a quarter is the day before the next one opens, which
+    # keeps leap years and 31-day months correct without a table.
+    close_month = open_month + 3
+    if close_month &gt; 12:
+        end = _dt.date(open_year + 1, close_month - 12, 1) - _dt.timedelta(days=1)
+    else:
+        end = _dt.date(open_year, close_month, 1) - _dt.timedelta(days=1)
+    return (start, end)</code></pre>
+
+    <p>That comment in <code>quarter_bounds</code> is the part I would keep in any rewrite. The obvious implementation is a table of month lengths with a special case for February. Computing the last day as "the day before the next quarter opens" removes the table and the special case together, so a leap year cannot fall through a gap.</p>
+
+    <p>Quarters are fiscal, not calendar: Q1 is Apr-Jun, Q2 Jul-Sep, Q3 Oct-Dec, Q4 Jan-Mar. So <code>quarter_of(date(2026, 1, 5))</code> returns <code>4</code>, not <code>1</code> — the mistake most reporting code makes when someone finally notices the year is wrong but not the quarter.</p>
+
+    <h2>What's new in this release</h2>
+
+    <p>The module ships fourteen public functions plus one exception type, all in a single 364-line file:</p>
+
+    <ul>
+      <li><strong>Lookups</strong> — <code>fy_of()</code>, <code>fy_bounds()</code>, <code>quarter_of()</code>, <code>quarter_bounds()</code>, <code>month_of_fy()</code>.</li>
+      <li><strong>Labels</strong> — <code>fy_label()</code> in four styles (<code>'FY2025-26'</code>, <code>'FY2025-2026'</code>, <code>'2025-26'</code>, <code>'FY25'</code>) and <code>quarter_label()</code> for strings like <code>'Q4 FY2025-26'</code>.</li>
+      <li><strong>Parsing</strong> — <code>parse_fy()</code> reads the labels people actually type: <code>FY 2025-26</code>, <code>2025-2026</code>, <code>2025/26</code>, <code>FY 25</code>, even a bare <code>2025</code>. En and em dashes, stray spaces and mixed case are all tolerated.</li>
+      <li><strong>Arithmetic</strong> — <code>shift_fy()</code>, <code>fy_months()</code>, <code>fy_quarters()</code>, <code>fy_days()</code> and <code>fy_span()</code>.</li>
+    </ul>
+
+    <p>The behaviour that took the most thought is refusal. <code>parse_fy('2025-2027')</code> raises instead of guessing which year you meant, and so do <code>'2025-25'</code> and <code>'26-25'</code>. Passing a string, a float or <code>None</code> where a date belongs raises <code>FiscalYearError</code>, a <code>ValueError</code> subclass, rather than being coerced. A <code>datetime</code> is accepted and truncated to its day.</p>
+
+    <p>Two documented limits are deliberate. Two-digit labels are read as 20xx, so <code>'FY99'</code> means 2099 — a compact label carries no century, and pretending otherwise would be a guess. Years are bounded to 1000-9998 so that every label and the 31 March closing the year stay representable.</p>
+
+    <p>The module comes with a runnable <code>example.py</code> that buckets a ledger of eight invoices across the 1 April boundary and parses a list of messy imported labels, and a test suite of <strong>121 tests</strong> that all pass, plus doctested examples in the docstrings. That is the repo's rule: a subfolder ships with its own code, its own tests and its own README, or it does not get committed.</p>
+
+    <h2>Roadmap</h2>
+
+    <p>Nothing below exists yet — it is where I think this goes next, not a promise:</p>
+
+    <ul>
+      <li>A thin adapter so a <code>dict</code> or <code>csv</code> export can be grouped by fiscal year without a hand-written loop in every script.</li>
+      <li>An optional <code>start_month</code> parameter, since a few countries and a few internal calendars do not open in April.</li>
+      <li>Property-based tests for the boundary pairs, so 1 April and 31 March are proven exhaustive rather than spot-checked.</li>
+      <li>Type hints verified under <code>mypy --strict</code> in CI, the same gate I wired into my internship repo.</li>
+    </ul>
+
+    <h2>Conclusion</h2>
+
+    <p>Every one of these bugs is the same bug: <code>date.year</code> answering a calendar question when the business asked a fiscal one. It costs three lines to write a helper, and it costs a week to find the mistake in a filed return.</p>
+
+    <p>If you write Python that touches Indian money, dates or reporting, take the module. It has no dependencies, so it drops into a script or a service without a lockfile conversation.</p>
+
+    <p>Read the code at <a href="https://github.com/krishsharma-code/daily-dev-workspace/tree/main/python/fiscal-year">github.com/krishsharma-code/daily-dev-workspace/tree/main/python/fiscal-year</a>, run <code>python example.py</code> to see the ledger bucket itself, and open an issue if your reporting calendar has an edge I have missed. More of my work is on <a href="https://github.com/krishsharma-code">GitHub</a>, and you can find the rest of my writing and portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+
+    <hr>
+
+    <p class="bio">Written by Krish Sharma (krishsharma-code) — Open-Source Contributor. Explore my code on <a href="https://github.com/krishsharma-code">GitHub</a>, connect with me on <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>, and view my full portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="/">← All posts</a>
+    <a href="https://github.com/krishsharma-code">GitHub</a>
+    <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+    <a href="https://about.me/krishsharma-code">About.me</a>
+    <span class="license">&copy; 2026 Krish Sharma &middot; Code <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE">MIT</a> &middot; Articles <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE-CONTENT">CC BY 4.0</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
