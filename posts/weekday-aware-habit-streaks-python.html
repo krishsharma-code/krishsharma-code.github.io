@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Habit Streak Is Lying to You Every Tuesday</title>
+<meta name="description" content="A weekday-aware habit streak engine in pure Python: why a Mon/Wed/Fri streak must not break on Tuesday, and the three rules that fix it.">
+<link rel="canonical" href="https://krishsharma-code.github.io/posts/weekday-aware-habit-streaks-python.html">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="Your Habit Streak Is Lying to You Every Tuesday">
+<meta property="og:description" content="Why a Mon/Wed/Fri habit should not reset on Tuesday — and the three-rule Python engine that counts only the days you were actually due.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://krishsharma-code.github.io/posts/weekday-aware-habit-streaks-python.html">
+<meta property="article:published_time" content="2026-11-26">
+<meta name="author" content="Krish Sharma">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Your Habit Streak Is Lying to You Every Tuesday",
+  "description": "A weekday-aware habit streak engine in pure Python: why a Mon/Wed/Fri streak must not break on Tuesday, and the three rules that fix it.",
+  "datePublished": "2026-11-26",
+  "author": {
+    "@type": "Person",
+    "name": "Krish Sharma",
+    "url": "https://about.me/krishsharma-code",
+    "sameAs": [
+      "https://github.com/krishsharma-code",
+      "https://www.linkedin.com/in/krish-sharma07"
+    ]
+  },
+  "mainEntityOfPage": "https://krishsharma-code.github.io/posts/weekday-aware-habit-streaks-python.html"
+}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Krish Sharma<span>.</span></a>
+    <nav class="top">
+      <a href="https://github.com/krishsharma-code">GitHub</a>
+      <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+      <a href="https://about.me/krishsharma-code">About.me</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article>
+    <h1>Your Habit Streak Is Lying to You Every Tuesday</h1>
+    <p class="meta"><time datetime="2026-11-26">26 November 2026</time> · Krish Sharma</p>
+
+    <p>Open almost any habit tracker and create a habit that runs Monday, Wednesday and Friday. Tick off Monday. Tick off Wednesday. Then let Thursday and the weekend pass without a single check-in — because nothing was due — and watch what the app does on the following Monday.</p>
+
+    <p>It says <strong>1</strong>.</p>
+
+    <p>You did exactly what you promised. The app counted the days you were never asked to show up, called them misses, and threw the run away. That is not a habit problem. It is an arithmetic problem, and it is the one I set out to fix in <code>streak-board</code>, the newest module in my <a href="https://github.com/krishsharma-code/daily-dev-workspace">daily-dev-workspace</a> repository.</p>
+
+    <h2>The problem: streaks are counted in calendar days, habits are not</h2>
+
+    <p>Most streak implementations store check-ins and then walk backwards one day at a time, asking "did anything happen on this date?". It works beautifully for a daily habit and breaks for every other kind.</p>
+
+    <p>Two bugs follow from that single shortcut.</p>
+
+    <p><strong>The off-day bug.</strong> A habit scheduled three days a week is measured against seven days a week. Tuesday is not a failure, it is a rest day, but the counter does not know the difference. Anyone training on a schedule rather than daily is punished by the UI for following the plan the UI was given.</p>
+
+    <p><strong>The today bug.</strong> The other half is subtler. If a habit is due today and you have not ticked it yet, most implementations count that as a miss and reset the streak at 9 a.m. The day is not over. Counting it as a failure at breakfast is like marking an exam before the student sits it.</p>
+
+    <p>Underneath both sits a quieter bug: timestamps. A check-in at 23:59 and one at 00:01 are different days, and a system that stores instants instead of days will eventually disagree with itself.</p>
+
+    <h2>How it works: three rules, one pure function</h2>
+
+    <p>The whole engine lives in <code>fullstack-mix/streak-board/server/streak.py</code> and it is pure functions over <code>datetime.date</code> objects — no database, no clock, no sockets. That matters: "what counts as an unbroken run" is the interesting part, and it is easier to trust when it can be tested without a server.</p>
+
+    <p>A habit stores its due days as ISO weekday numbers, Monday <code>0</code> through Sunday <code>6</code>. From that, three rules cover every case:</p>
+
+    <ol>
+      <li>A due day with a check-in extends the run.</li>
+      <li>A due day in the <em>past</em> with no check-in ends it — that is the entire point of a streak.</li>
+      <li>Today, if due and not ticked yet, is <em>skipped</em> rather than counted as a miss. The day is still in progress, and checking in later today extends the run instead of restarting it at 1.</li>
+    </ol>
+
+    <p>Rule three is the reason the current streak needs a reference day while the longest streak does not. Here is the actual function, unchanged from the repo:</p>
+
+    <pre><code>def current_streak(
+    days: Iterable[object], today: object, weekdays: object = None
+) -&gt; int:
+    """How many scheduled days in a row are done, counting back from today.
+
+    * A checked-in scheduled day extends the streak.
+    * Today, if scheduled and not yet done, is skipped rather than counted as a
+      miss -- the day is still in progress.
+    * Any earlier scheduled day without a check-in ends the run.
+    """
+    today = parse_day(today)
+    done = {day for day in _as_day_set(days) if day &lt;= today}
+    days_of_week = normalise_weekdays(weekdays)
+
+    if today.weekday() in days_of_week and today in done:
+        cursor: Optional[date] = today
+    else:
+        cursor = previous_scheduled_day(today, days_of_week)
+
+    streak = 0
+    while cursor is not None and cursor in done:
+        streak += 1
+        cursor = previous_scheduled_day(cursor, days_of_week)
+    return streak</code></pre>
+
+    <p>Read the middle block again: that is where both bugs die. If today is due and already ticked, the walk starts at today. Otherwise it starts at <code>previous_scheduled_day</code> — the latest due day <em>strictly before</em> today, which skips both the unfinished today and every rest day in one step. The loop then hops backwards between due days only, so a Monday-to-Monday run across a quiet weekend counts as two, not as a reset.</p>
+
+    <p><code>parse_day</code> is deliberately strict: <code>2026-1-5</code>, <code>2026-01-05T10:00</code> and <code>05-01-2026</code> are rejected rather than guessed at, because a log that records the wrong day is worse than one that asks again.</p>
+
+    <h2>What's new in this release</h2>
+
+    <p>The commit that landed this week (<code>efaeb4a</code>, <em>feat(fullstack-mix): add streak-board for weekday-aware habit streaks</em>) adds a complete, self-contained project rather than a snippet:</p>
+
+    <ul>
+      <li><strong>A stdlib server.</strong> <code>server/app.py</code> is a <code>http.server</code> router that also serves the front end from the same origin, so there is no build step, no framework and no third-party package anywhere in the tree.</li>
+      <li><strong>SQLite storage.</strong> <code>server/store.py</code> keeps habits and check-ins in <code>sqlite3</code>, defaulting to <code>:memory:</code> and persisting with <code>STREAK_BOARD_DB=habits.db</code>. Habit ids are slugs of the name, so "Read 20 pages" becomes <code>read-20-pages</code>. Check-ins are idempotent — repeating one is a no-op, not an error — and deleting a habit cascades to its history.</li>
+      <li><strong>A tolerant weekday parser.</strong> <code>weekdays</code> accepts <code>"daily"</code>, <code>"mon,wed,fri"</code>, <code>["Mon", "Wed"]</code>, <code>[0, 2, 4]</code>, or nothing at all for every day, and normalises all of it into one sorted, de-duplicated tuple.</li>
+      <li><strong>A 30-day completion window measured against due days.</strong> A Saturday-only habit is scored against Saturdays, not against 30 calendar days, so a perfect month is genuinely 100%. The payload also lists the exact days that were missed.</li>
+      <li><strong>Backfill yes, future no.</strong> A check-in may be dated in the past, but never in the future — a streak that can be pre-filled says nothing about whether anything was done.</li>
+      <li><strong>Reproducible tests.</strong> Every route accepts <code>?today=YYYY-MM-DD</code> to pin the reference day, so the suite never touches the clock. The full run is 111 passing tests across the engine, the store and the HTTP routes, including end-to-end tests that boot a real server on an ephemeral port.</li>
+    </ul>
+
+    <p>You can try the engine without a socket: <code>python server/example.py</code> creates habits, checks in and prints the resulting streaks.</p>
+
+    <h2>Roadmap</h2>
+
+    <p>These are directions I would like to take it next; none are in the repo yet:</p>
+
+    <ul>
+      <li>A configurable day boundary, for late-shift check-ins past midnight.</li>
+      <li>An optional "flex day" allowance for habits that tolerate one slip without losing the run.</li>
+      <li>Export and import of check-in history as plain JSON.</li>
+      <li>A calendar heatmap showing due, done and rest days as three distinct states.</li>
+    </ul>
+
+    <h2>Conclusion</h2>
+
+    <p>A streak is a promise you made to yourself, and software that resets it for reasons you never agreed to is teaching you to distrust your own record. The fix is not a bigger feature list — it is deciding, once, what "due" means and then counting nothing else.</p>
+
+    <p>Three rules, one pure function, and a habit tracker that finally understands that Tuesday was never the point.</p>
+
+    <p>The code is open: <a href="https://github.com/krishsharma-code/daily-dev-workspace/tree/main/fullstack-mix/streak-board">daily-dev-workspace/fullstack-mix/streak-board</a>. Clone it, run <code>python server/app.py</code>, and tell me which rule your favourite tracker gets wrong — or open an issue if you spot a case the engine still misses.</p>
+
+    <hr>
+
+    <p class="bio">Written by Krish Sharma (krishsharma-code) — Open-Source Contributor. Explore my code on <a href="https://github.com/krishsharma-code">GitHub</a>, connect with me on <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>, and view my full portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="/">← All posts</a>
+    <a href="https://github.com/krishsharma-code">GitHub</a>
+    <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+    <a href="https://about.me/krishsharma-code">About.me</a>
+    <span class="license">&copy; 2026 Krish Sharma &middot; Code <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE">MIT</a> &middot; Articles <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE-CONTENT">CC BY 4.0</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
