@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your 8-Hour SLA Deadline Is a Lie After 6 p.m. on Friday</title>
+<meta name="description" content="A dependency-free Python business-hours calendar that skips weekends, holidays and lunch breaks when computing SLA deadlines, with 45 passing tests.">
+<link rel="canonical" href="https://krishsharma-code.github.io/posts/business-hours-sla-deadline-python.html">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="Your 8-Hour SLA Deadline Is a Lie After 6 p.m. on Friday">
+<meta property="og:description" content="Adding 8 hours to a Friday 5 p.m. ticket lands on Saturday 1 a.m. A stdlib-only Python calendar that counts open time only — weekends, holidays and lunch breaks excluded.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://krishsharma-code.github.io/posts/business-hours-sla-deadline-python.html">
+<meta property="og:image" content="https://krishsharma-code.github.io/assets/img/business-hours-sla-demo.png">
+<meta property="og:image:width" content="1352">
+<meta property="og:image:height" content="556">
+<meta property="og:image:alt" content="Terminal output of python example.py from the business-hours module, showing an 8 working-hour SLA on a ticket opened Friday 17:00 falling due Monday 16:00">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="article:published_time" content="2026-11-27">
+<meta name="author" content="Krish Sharma">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Your 8-Hour SLA Deadline Is a Lie After 6 p.m. on Friday",
+  "description": "A dependency-free Python business-hours calendar that skips weekends, holidays and lunch breaks when computing SLA deadlines, with 45 passing tests.",
+  "datePublished": "2026-11-27",
+  "author": {
+    "@type": "Person",
+    "name": "Krish Sharma",
+    "url": "https://about.me/krishsharma-code",
+    "sameAs": [
+      "https://github.com/krishsharma-code",
+      "https://www.linkedin.com/in/krish-sharma07"
+    ]
+  },
+  "mainEntityOfPage": "https://krishsharma-code.github.io/posts/business-hours-sla-deadline-python.html"
+}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Krish Sharma<span>.</span></a>
+    <nav class="top">
+      <a href="https://github.com/krishsharma-code">GitHub</a>
+      <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+      <a href="https://about.me/krishsharma-code">About.me</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article>
+    <h1>Your 8-Hour SLA Deadline Is a Lie After 6 p.m. on Friday</h1>
+    <p class="meta"><time datetime="2026-11-27">27 November 2026</time> · Krish Sharma</p>
+
+    <figure>
+      <img src="/assets/img/business-hours-sla-demo.png" width="676" height="278" loading="eager"
+           alt="Terminal output of python example.py from the business-hours module: a calendar of Monday to Friday 09:30 to 18:30 in Asia/Kolkata with one holiday, a ticket opened Fri 27 Nov 2026 17:00 with an 8 working-hour SLA due Mon 30 Nov 2026 16:00, open time across the weekend of 2:00:00, next opening after 06:00 Monday at 2026-11-30 09:30:00+05:30, a split shift with the lunch break excluded landing at 2026-11-30 15:00:00, a backwards walk to 2026-11-30 10:30:00+05:30, a holiday pushing a deadline to 2026-12-01 10:00:00, and 1 day 21:00:00 of open time in the week.">
+      <figcaption>Real output of <code>python example.py</code>. The ticket opens Friday at 17:00 and is due Monday at 16:00 — because only 1.5 open hours were left on Friday.</figcaption>
+    </figure>
+
+    <p>A support ticket arrives at 17:00 on Friday. The promise attached to it says <em>we reply within 8 working hours</em>. Add eight hours with <code>timedelta</code> and the system prints a deadline of Saturday, 01:00 — a moment when nobody at the desk exists, on a day the desk is not open.</p>
+
+    <p>The customer is told a deadline that no team can meet. The engineer who picks the ticket up on Monday is already late. And the dashboard that reports SLA breaches will be reporting a fiction, because every one of those breaches was created by arithmetic, not by work.</p>
+
+    <p>That gap — between elapsed hours and <em>working</em> hours — is what the new <code>business-hours</code> module in my <a href="https://github.com/krishsharma-code/daily-dev-workspace">daily-dev-workspace</a> repository closes. It is pure standard library: <code>datetime</code> and <code>zoneinfo</code>, nothing else.</p>
+
+    <h2>The problem: closed time is not a small correction</h2>
+
+    <p>Subtracting two timestamps gives you a number that is correct and useless. An 8-hour SLA opened on Friday evening is really 1.5 hours before the weekend, then 6.5 hours from Monday morning. Between those two facts sits a weekend, and if there is a public holiday on Monday, a third day disappears from the count too.</p>
+
+    <p>Teams usually patch this with a helper that adds days until the hour falls inside 09:00–17:00. That works until the first lunch break, the first split shift, the first holiday, or the first server that stores UTC while the desk works in IST. Then the helper quietly starts lying again, and nobody notices until a customer quotes a deadline back at you.</p>
+
+    <h2>How it works: resolve the day, then walk the windows</h2>
+
+    <p>The module has one idea. A <code>BusinessCalendar</code> knows three things: which weekdays are open, which hours of those days count, and which dates are holidays. Everything else is arithmetic on top of that.</p>
+
+    <p><code>segments(day)</code> is the single source of truth. Given a date, it returns the open intervals as <code>(start, end)</code> datetime pairs — already resolved against the holiday set, already merged when two windows overlap or touch. Every other method reads from it, which is why a holiday, a split shift and an ordinary Tuesday all behave the same way.</p>
+
+    <p>Here is the real forward walk from <code>business_hours.py</code>, unchanged:</p>
+
+    <pre><code>    def _add(self, cursor: datetime, remaining: timedelta) -&gt; datetime:
+        for day in self._days_forward(cursor.date()):
+            for start, end in self.segments(day):
+                point = max(cursor, start)
+                if point &gt;= end:
+                    continue
+                available = end - point
+                if available &gt;= remaining:
+                    return point + remaining
+                remaining -= available
+                cursor = end
+        raise NoOpenWindowError("no open window found within the search range")</code></pre>
+
+    <p>Four lines carry the whole contract. <code>point = max(cursor, start)</code> is the clipping rule: arriving at 07:00 for a 09:30 opening does not charge you two and a half hours of waiting, it starts the clock at 09:30. <code>if point &gt;= end: continue</code> is the exclusive-close rule: a window ending at 18:30 does not contain 18:30, so the walk moves to the next segment instead of charging zero. <code>available</code> is what is left of this window, and the last line spills the remainder into the following one.</p>
+
+    <p><code>_subtract</code> is the mirror image and runs the segments of each day in reverse, stepping to the previous day from its last instant so every window on it is fully available. That is what makes "8 working hours before Monday 18:30" land at Monday 10:30 rather than somewhere inside the weekend.</p>
+
+    <p>Two smaller decisions are worth naming. Overnight windows are rejected at construction time — a window whose close is not after its open raises <code>ValueError</code> instead of guessing at a midnight rollover. And the walk is bounded by <code>MAX_DAYS = 3660</code>, roughly ten years, so a calendar whose windows can never match the input raises <code>NoOpenWindowError</code> (a <code>ValueError</code> subclass) instead of looping forever.</p>
+
+    <h2>What's new in this release</h2>
+
+    <p>This week's commit (<code>f54cc44</code>, <em>feat(python): add business-hours calendar for SLA deadlines</em>) adds the whole module under <code>python/business-hours/</code>:</p>
+
+    <ul>
+      <li><strong>Two ways to describe a week.</strong> <code>BusinessCalendar(("09:30", "18:30"), workdays=..., holidays=..., tz=...)</code> for one window per day, and <code>BusinessCalendar.from_windows({0: [("09:00", "13:00"), ("14:00", "18:00")]})</code> for a lunch break or a shift that differs by weekday.</li>
+      <li><strong>The queries you actually need.</strong> <code>add_business_hours()</code> for deadlines, <code>business_time_between()</code> for elapsed open time, plus <code>is_open()</code>, <code>next_open()</code>, <code>is_workday()</code> and <code>segments()</code>.</li>
+      <li><strong>Deadlines that walk backwards.</strong> <code>add_business_hours()</code> accepts an int, a float or a <code>timedelta</code>, and a negative value runs <code>_subtract</code> instead.</li>
+      <li><strong>Real timezones.</strong> With <code>tz="Asia/Kolkata"</code>, naive input is read as wall-clock time in that zone and results come back zone-aware; aware input is converted into it. With <code>tz=None</code> the calendar works on naive datetimes and <em>rejects</em> aware ones rather than comparing across zones by accident.</li>
+      <li><strong>Tolerant input, strict output.</strong> Hours accept <code>"09:30"</code>, <code>"9:30"</code>, <code>"09:30:00"</code> or a <code>time</code>; holidays accept <code>date</code>, <code>datetime</code> or <code>"YYYY-MM-DD"</code>; an overlapping pair of windows is merged so double-booked shifts count once.</li>
+      <li><strong>45 tests and a runnable example.</strong> The suite covers the arithmetic, the parsing and the error paths; <code>python example.py</code> prints the SLA walk-through shown above.</li>
+    </ul>
+
+    <figure>
+      <img src="/assets/img/business-hours-sla-tests.png" width="676" height="143" loading="lazy"
+           alt="Terminal showing python -m pytest -q in the business-hours folder, ending with 45 passed in 0.31s.">
+      <figcaption>The suite as it runs in the repo: <code>45 passed</code>, covering the arithmetic, the parsers and the error paths.</figcaption>
+    </figure>
+
+    <p>The module is listed in <code>python/README.md</code> alongside the rest of the collection, so it is discoverable without knowing the path.</p>
+
+    <h2>Roadmap</h2>
+
+    <p>Directions I want to take next; none of these exist in the repo yet:</p>
+
+    <ul>
+      <li>A per-day timezone override for desks that follow the customer's zone, not the team's.</li>
+      <li>Named holiday calendars loaded from a small JSON file, so a year of dates is not hard-coded at the call site.</li>
+      <li>Half-day holidays, which are currently all-or-nothing.</li>
+      <li>A batch helper that answers "which of these 500 tickets breach by Friday?" in one pass instead of 500 walks.</li>
+    </ul>
+
+    <h2>Conclusion</h2>
+
+    <p>An SLA is a promise expressed in working hours, and software that stores it as a timestamp is storing a different promise than the one the customer was given. The fix is not a bigger scheduling product. It is deciding once what "open" means — which days, which hours, which holidays, which zone — and then counting nothing else.</p>
+
+    <p>Closed time gets skipped, never charged. That single rule is the whole module, and it turns a Friday evening ticket into a Monday deadline you can actually keep.</p>
+
+    <p>The code is open: <a href="https://github.com/krishsharma-code/daily-dev-workspace/tree/main/python/business-hours">daily-dev-workspace/python/business-hours</a>. Clone it, run <code>python example.py</code> to see the walk-through, then point it at your own support desk — and tell me which holiday your current SLA calculator still gets wrong, or open an issue if you find a window case the walk misses.</p>
+
+    <hr>
+
+    <p class="bio">Written by Krish Sharma (krishsharma-code) — Open-Source Contributor. Explore my code on <a href="https://github.com/krishsharma-code">GitHub</a>, connect with me on <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>, and view my full portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="/">← All posts</a>
+    <a href="https://github.com/krishsharma-code">GitHub</a>
+    <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+    <a href="https://about.me/krishsharma-code">About.me</a>
+    <span class="license">&copy; 2026 Krish Sharma &middot; Code <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE">MIT</a> &middot; Articles <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE-CONTENT">CC BY 4.0</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
