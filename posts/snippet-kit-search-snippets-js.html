@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Search Snippet Cuts a Word in Half — and Unicode Notices</title>
+<meta name="description" content="A dependency-free ES module for search-result snippets: quoted phrases, merged Unicode-safe highlight ranges, escaped HTML and word-safe cuts.">
+<link rel="canonical" href="https://krishsharma-code.github.io/posts/snippet-kit-search-snippets-js.html">
+<link rel="stylesheet" href="/assets/style.css">
+<meta property="og:title" content="Your Search Snippet Cuts a Word in Half — and Unicode Notices">
+<meta property="og:description" content="A 160-character window around a match sounds trivial until the query has a phrase, the text is in Devanagari and the cut lands inside a word. A dependency-free ES module for the parts that break.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://krishsharma-code.github.io/posts/snippet-kit-search-snippets-js.html">
+<meta property="og:image" content="https://krishsharma-code.github.io/assets/img/snippet-kit-search-snippets-js-demo.png">
+<meta property="og:image:width" content="1352">
+<meta property="og:image:height" content="635">
+<meta property="og:image:alt" content="Terminal output of a Node driver importing snippet-kit.js, showing the parsed terms for the query quote-credit-note-quote gst, per-document match counts and ranges, a Devanagari ticket with no match, and Devanagari match offsets">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="article:published_time" content="2026-11-28">
+<meta name="author" content="Krish Sharma">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Your Search Snippet Cuts a Word in Half — and Unicode Notices",
+  "description": "A dependency-free ES module for search-result snippets: quoted phrases, merged Unicode-safe highlight ranges, escaped HTML and word-safe cuts.",
+  "datePublished": "2026-11-28",
+  "author": {
+    "@type": "Person",
+    "name": "Krish Sharma",
+    "url": "https://about.me/krishsharma-code",
+    "sameAs": [
+      "https://github.com/krishsharma-code",
+      "https://www.linkedin.com/in/krish-sharma07"
+    ]
+  },
+  "mainEntityOfPage": "https://krishsharma-code.github.io/posts/snippet-kit-search-snippets-js.html"
+}
+</script>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">Krish Sharma<span>.</span></a>
+    <nav class="top">
+      <a href="https://github.com/krishsharma-code">GitHub</a>
+      <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+      <a href="https://about.me/krishsharma-code">About.me</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article>
+    <h1>Your Search Snippet Cuts a Word in Half — and Unicode Notices</h1>
+    <p class="meta"><time datetime="2026-11-28">28 November 2026</time> · Krish Sharma</p>
+
+    <figure>
+      <img src="/assets/img/snippet-kit-search-snippets-js-demo.png" width="676" height="318" loading="eager"
+           alt="Terminal output of a Node driver importing snippet-kit.js with the query quote-credit-note-quote gst: the parsed terms array shows one phrase term and one word term, TKT-4412 returns matched=1 with the range 28 to 31 around GST, TKT-4408 and the Devanagari ticket NOTE-88 return matched=0 with the head of the text, DOC-201 returns matched=1 with the range 2 to 13 around credit note, Devanagari offsets for the word chaalan come back as 11 to 16, and annotate splits a sentence into plain and matched segments.">
+      <figcaption>Real output of a Node driver importing <code>snippet-kit.js</code> and running it over the six sample tickets from the module's own demo page. Matched spans print in square brackets; no match still returns the head of the text.</figcaption>
+    </figure>
+
+    <p>Open any search page and read the second result closely. The bold starts in the middle of a word. An ellipsis appears where a sentence should have continued. A two-word query bolds one word twice and wraps it in two nested tags, and a result written in Hindi or Tamil comes back with the highlight shifted by three characters because somebody called <code>toLowerCase()</code> on a string and trusted the offsets afterwards.</p>
+
+    <p>None of this is hard to fix. All of it is easy to forget. That is the space <code>snippet-kit</code> lives in — a module I added to <a href="https://github.com/krishsharma-code/daily-dev-workspace">daily-dev-workspace</a> this week: a pure ES module over strings, with no DOM, no dependencies and no build step.</p>
+
+    <h2>The problem: a snippet is four problems wearing one hat</h2>
+
+    <p>The naive version takes the text, calls <code>indexOf</code>, slices 80 characters either side, wraps the match in <code>&lt;mark&gt;</code> and renders it. It works on demo data and fails in production for four separate reasons.</p>
+
+    <p><strong>The query is not a string.</strong> In <code>"credit note" refund</code> the quotes mean one phrase and the bare word means a second term. Split on whitespace and two of your three terms match places the user never asked about.</p>
+
+    <p><strong>Matches overlap.</strong> Search for <code>gst invoice</code> and the phrase and the word <code>gst</code> match the same characters. Emit a range per term and the renderer produces <code>&lt;mark&gt;gst &lt;mark&gt;invoice&lt;/mark&gt;&lt;/mark&gt;</code> — invalid nesting that browsers silently repair by moving your tags.</p>
+
+    <p><strong>Offsets drift.</strong> <code>toLowerCase</code> is not length-preserving: the Turkish dotted capital İ lowercases to two code units. Fold the haystack, find a match at 40, slice the original at 40, and everything after that point is off by one.</p>
+
+    <p><strong>The cut lands anywhere.</strong> A fixed width splits words, splits a surrogate pair so an emoji renders as two replacement characters, and separates a Devanagari base letter from its vowel sign.</p>
+
+    <p>And one security bug on top: a snippet is user content rendered as HTML. Unescaped, it is an injection.</p>
+
+    <h2>How it works: offsets first, markup second</h2>
+
+    <p>One rule runs through the module: every function returns <em>offsets</em>, never markup. <code>findMatches()</code> gives <code>{ start, end }</code> pairs with an exclusive end, like <code>String.prototype.slice</code>. Rendering is a separate decision — <code>annotate()</code> turns offsets into plain and matched segments for a framework, <code>highlightHtml()</code> into an escaped string.</p>
+
+    <p>Matching is a scan, not a regex. Each term walks the haystack with <code>indexOf</code>, resuming from <code>at + 1</code> so overlapping occurrences are seen; the ranges then pass through <code>mergeRanges()</code>, which sorts by start and collapses anything that overlaps or touches. One word, one <code>&lt;mark&gt;</code>, always.</p>
+
+    <p>Case folding is the care that makes offsets trustworthy. <code>fold()</code> walks the string character by character and keeps the original whenever its lowercase form would change length, so the haystack is the same length as the text and an index into one is an index into the other.</p>
+
+    <p>Windowing is where the module earns its keep. <code>computeWindow()</code> anchors on the first match, opens about 35% of the budget ahead of it, widens if a match straddles an edge, trims the roomier side back to budget, snaps to whitespace within 24 characters, then hands the result to two guards — unchanged from <code>snippet-kit.js</code>:</p>
+
+    <pre><code>/** Never begin a window on a low surrogate or an orphaned combining mark. */
+function safeStart(text, index) {
+  let i = Math.max(0, Math.min(index, text.length));
+  if (i &gt; 0 &amp;&amp; i &lt; text.length &amp;&amp; isLowSurrogate(text.charCodeAt(i))) i -= 1;
+  if (i &gt; 0 &amp;&amp; i &lt; text.length &amp;&amp; COMBINING_MARK.test(charStartingAt(text, i))) i -= 1;
+  return i;
+}
+
+/** Never end a window between a high surrogate and its pair, or before a mark. */
+function safeEnd(text, index) {
+  let i = Math.max(0, Math.min(index, text.length));
+  if (i &gt; 0 &amp;&amp; i &lt; text.length &amp;&amp; isHighSurrogate(text.charCodeAt(i - 1))) i -= 1;
+  if (i &gt; 0 &amp;&amp; i &lt; text.length &amp;&amp; COMBINING_MARK.test(charStartingAt(text, i))) i += 1;
+  return i;
+}</code></pre>
+
+    <p>Word snapping is best-effort and knows it. If no space turns up within 24 characters — a long URL, a base64 blob — the guards still run and the window is cut at the character limit instead of dropped.</p>
+
+    <p>Output passes through <code>escapeHtml()</code> — <code>&amp; &lt; &gt; " '</code> — before any tag is added, so <code>snippetHtml()</code> escapes the text, wraps matched runs in <code>&lt;mark&gt;</code> (or your tag and class) and adds an ellipsis only where something was trimmed. <code>snippet()</code> returns those two facts as booleans, so a React or Svelte caller can render its own affordance instead of parsing a string.</p>
+
+    <h2>What's new in this release</h2>
+
+    <p>This week's commit (<code>9fa83a0</code>, <em>feat(web-frontend): add snippet-kit for safe search-result snippets</em>) adds the module under <code>web-frontend/snippet-kit/</code>:</p>
+
+    <ul>
+      <li><strong>Queries with phrases.</strong> <code>parseQuery()</code> turns <code>"gst invoice" refund</code> into one phrase term and one word term, drops case-insensitive duplicates and puts longer terms first. <code>"credit note"</code> returns one range; unquoted, it returns two.</li>
+      <li><strong>Two shapes of input.</strong> <code>terms</code> is a query string or an array of strings and <code>{ text, phrase }</code> objects, so a query parsed once can be reused across many documents.</li>
+      <li><strong>Whole-word matching when you want it.</strong> <code>wholeWord: true</code> rejects matches glued to a letter, digit or underscore, so <code>gst</code> no longer matches inside <code>gstr</code>.</li>
+      <li><strong>A useful no-match result.</strong> A query that misses returns the head of the text, <code>matched: 0</code> and an empty range list — never an empty string.</li>
+      <li><strong>30 tests and a browser demo.</strong> <code>node --test</code> covers parsing, merging, escaping, Unicode offsets and the window edge cases; <code>index.html</code> searches six sample support tickets, one in Devanagari, and prints the ranges the first result returned.</li>
+      <li><strong>Listed where it can be found.</strong> The module is in <code>web-frontend/README.md</code> with a one-line description, alongside the rest of the collection.</li>
+    </ul>
+
+    <figure>
+      <img src="/assets/img/snippet-kit-search-snippets-js-tests.png" width="676" height="426" loading="lazy"
+           alt="Terminal showing node --test in web-frontend/snippet-kit, with the last three passing subtests named snippetHtml escapes content and marks matches with ellipses, snippetHtml accepts a custom tag and ellipsis, and snippetHtml of a short string is just highlighted text, followed by the TAP summary line 1 to 30, tests 30, pass 30, fail 0.">
+      <figcaption>The suite as it runs in the repo: <code>node --test</code> reporting <code># pass 30</code> and <code># fail 0</code>.</figcaption>
+    </figure>
+
+    <p>The demo output above is worth reading once. The phrase <code>"credit note"</code> matches the policy document at range 2–13, <code>gst</code> matches the first ticket at 28–31, and the Devanagari ticket reports no match rather than a broken one. The last two lines show why offsets matter: <code>चालान</code> comes back as 11–16 on Devanagari text, and <code>annotate()</code> splits a sentence into five segments, three plain and two matched.</p>
+
+    <h2>Roadmap</h2>
+
+    <p>Next steps; none of these exist in the repo yet:</p>
+
+    <ul>
+      <li>Grapheme-aware windowing via <code>Intl.Segmenter</code>, so an Indic conjunct cluster is treated as one unit rather than as a base plus marks.</li>
+      <li>A ranking helper that scores documents by match count and position.</li>
+      <li>A configurable cap on ranges per document, so a document that mentions the term forty times does not produce forty highlights.</li>
+      <li>TypeScript declaration files, generated from the JSDoc that is already in the source.</li>
+    </ul>
+
+    <h2>Conclusion</h2>
+
+    <p>A snippet is a promise about where a match lives, expressed in offsets and rendered as markup much later. Get the offsets right and rendering is a loop. Get them wrong and no amount of CSS saves the page: the highlight drifts, the words break, and the reader sees a sentence that was never written.</p>
+
+    <p>Merged ranges, length-preserving case folding, boundary snapping and escaped output are four small decisions that turn a 160-character cut into something a reader can trust.</p>
+
+    <p>The code is open: <a href="https://github.com/krishsharma-code/daily-dev-workspace/tree/main/web-frontend/snippet-kit">daily-dev-workspace/web-frontend/snippet-kit</a>. Clone it, run <code>node --test</code> to see the thirty cases pass, then open <code>index.html</code> and search the sample tickets yourself — and tell me which snippet bug your own search box still ships, or open an issue if you find a window case this module cuts badly.</p>
+
+    <hr>
+
+    <p class="bio">Written by Krish Sharma (krishsharma-code) — Open-Source Contributor. Explore my code on <a href="https://github.com/krishsharma-code">GitHub</a>, connect with me on <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>, and view my full portfolio on <a href="https://about.me/krishsharma-code">About.me</a>.</p>
+  </article>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <a href="/">← All posts</a>
+    <a href="https://github.com/krishsharma-code">GitHub</a>
+    <a href="https://www.linkedin.com/in/krish-sharma07">LinkedIn</a>
+    <a href="https://about.me/krishsharma-code">About.me</a>
+    <span class="license">&copy; 2026 Krish Sharma &middot; Code <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE">MIT</a> &middot; Articles <a href="https://github.com/krishsharma-code/krishsharma-code.github.io/blob/main/LICENSE-CONTENT">CC BY 4.0</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
